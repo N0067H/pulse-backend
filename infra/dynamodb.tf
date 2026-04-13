@@ -36,14 +36,7 @@ resource "aws_dynamodb_table" "check_results" {
 # result log
 output "dynamodb_tables" {
   value = {
-    apis = {
-      name = aws_dynamodb_table.apis.name
-      arn  = aws_dynamodb_table.apis.arn
-    }
-
-    check_results = {
-      name = aws_dynamodb_table.check_results.name
-      arn  = aws_dynamodb_table.check_results.arn
-    }
+    apis          = { name = aws_dynamodb_table.apis.name }
+    check_results = { name = aws_dynamodb_table.check_results.name }
   }
 }
