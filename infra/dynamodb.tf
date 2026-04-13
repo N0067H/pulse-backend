@@ -1,4 +1,3 @@
-# apis table
 resource "aws_dynamodb_table" "apis" {
   name         = "apis"
   billing_mode = "PAY_PER_REQUEST"
@@ -10,7 +9,6 @@ resource "aws_dynamodb_table" "apis" {
   }
 }
 
-# check_results table
 resource "aws_dynamodb_table" "check_results" {
   name         = "check_results"
   billing_mode = "PAY_PER_REQUEST"
@@ -33,7 +31,6 @@ resource "aws_dynamodb_table" "check_results" {
   }
 }
 
-# result log
 output "dynamodb_tables" {
   value = {
     apis          = { name = aws_dynamodb_table.apis.name }
