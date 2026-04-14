@@ -1,8 +1,3 @@
-variable "alert_email" {
-  type        = string
-  description = "SNS alert email"
-}
-
 resource "aws_sns_topic" "pulse_alert" {
   name = "pulse-alert"
 }
