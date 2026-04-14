@@ -24,6 +24,7 @@ dependencies {
     implementation platform('software.amazon.awssdk:bom:2.25.0')
     implementation 'software.amazon.awssdk:dynamodb'
     implementation 'software.amazon.awssdk:dynamodb-enhanced'
+    implementation 'software.amazon.awssdk:sns:2.25.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'io.projectreactor:reactor-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
