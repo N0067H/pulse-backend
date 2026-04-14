@@ -1,3 +1,7 @@
 spring:
   application:
     name: pulse-backend
+
+aws:
+  sns:
+    topicArn: arn:aws:sns:us-east-1:891376977549:pulse-alert
