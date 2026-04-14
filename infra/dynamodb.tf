@@ -30,10 +30,3 @@ resource "aws_dynamodb_table" "check_results" {
     enabled        = true
   }
 }
-
-output "dynamodb_tables" {
-  value = {
-    apis          = { name = aws_dynamodb_table.apis.name }
-    check_results = { name = aws_dynamodb_table.check_results.name }
-  }
-}
