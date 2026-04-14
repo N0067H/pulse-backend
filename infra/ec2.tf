@@ -64,3 +64,11 @@ resource "aws_instance" "pulse" {
     Name = "pulse"
   }
 }
+
+output "pulse_ec2" {
+  value = {
+    public_ip  = aws_instance.pulse.public_ip
+    public_dns = aws_instance.pulse.public_dns
+    instance_id = aws_instance.pulse.id
+  }
+}
