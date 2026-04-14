@@ -32,9 +32,9 @@ public class ApiRepository {
 
     public List<Api> findAll() {
         return apiTable.scan(ScanEnhancedRequest.builder().build())
-                .items()
-                .stream()
-                .toList();
+            .items()
+            .stream()
+            .toList();
     }
 
     public void deleteById(String apiId) {
@@ -43,7 +43,7 @@ public class ApiRepository {
 
     public void updateAlertSentAt(String apiId, String alertSentAt) {
         Api api = findById(apiId)
-                .orElseThrow(() -> new IllegalArgumentException("API not found: " + apiId));
+            .orElseThrow(() -> new IllegalArgumentException("API not found: " + apiId));
         api.setAlertSentAt(alertSentAt);
         apiTable.updateItem(api);
     }

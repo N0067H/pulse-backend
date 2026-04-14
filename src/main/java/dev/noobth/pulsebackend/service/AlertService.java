@@ -29,10 +29,10 @@ public class AlertService {
         apiRepository.updateAlertSentAt(apiId, Instant.now().toString());
 
         snsClient.publish(PublishRequest.builder()
-                .topicArn(topicArn)
-                .subject("[Pulse] API Consecutive failures detected\n")
-                .message("API Failed\nID: " + apiId + "\nURL: " + api.getUrl())
-                .build());
+            .topicArn(topicArn)
+            .subject("[Pulse] API Consecutive failures detected\n")
+            .message("API Failed\nID: " + apiId + "\nURL: " + api.getUrl())
+            .build());
     }
 
     private boolean shouldSendAlert(Api api) {

@@ -1,9 +1,17 @@
 package dev.noobth.pulsebackend.controller;
 
+import dev.noobth.pulsebackend.domain.Api;
+import dev.noobth.pulsebackend.dto.CreateApiRequestDto;
+import dev.noobth.pulsebackend.dto.CreateApiResponseDto;
 import dev.noobth.pulsebackend.service.ApiService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/apis")
@@ -13,27 +21,29 @@ public class ApiController {
     private final ApiService apiService;
 
     @PostMapping
-    public ResponseEntity<?> registerApi() {
-        return null;
+    public ResponseEntity<CreateApiResponseDto> registerApi(@RequestBody @Valid CreateApiRequestDto request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(apiService.registerApi(request));
     }
 
     @GetMapping
-    public ResponseEntity<?> getAllApis() {
-        return null;
+    public ResponseEntity<List<Api>> getAllApis() {
+        return ResponseEntity.ok(apiService.getAllApis());
     }
 
     @GetMapping("/{apiId}")
-    public ResponseEntity<?> getApi(@PathVariable String apiId) {
-        return null;
+    public ResponseEntity<Api> getApi(@PathVariable String apiId) {
+        return ResponseEntity.ok(apiService.getApi(apiId));
     }
 
     @DeleteMapping("/{apiId}")
-    public ResponseEntity<?> deleteApi(@PathVariable String apiId) {
-        return null;
+    public ResponseEntity<Void> deleteApi(@PathVariable String apiId) {
+        apiService.deleteApi(apiId);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{apiId}/enabled")
-    public ResponseEntity<?> toggleEnabled(@PathVariable String apiId) {
-        return null;
+    public ResponseEntity<Map<String, Boolean>> toggleEnabled(@PathVariable String apiId) {
+        boolean enabled = apiService.toggleEnabled(apiId);
+        return ResponseEntity.ok(Map.of("enabled", enabled));
     }
 }
