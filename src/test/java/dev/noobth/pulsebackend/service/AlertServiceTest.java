@@ -44,7 +44,7 @@ class AlertServiceTest {
         Api api = createApi(5, 3);
 
         // when
-        alertService.alertIfNeeded(api);
+        alertService.alertIfNeeded(api, "CONNECTION_ERROR", null, 1200L);
 
         // then
         ArgumentCaptor<PublishRequest> captor =
@@ -56,6 +56,9 @@ class AlertServiceTest {
         PublishRequest request = captor.getValue();
         assertThat(request.message()).contains("api1");
         assertThat(request.message()).contains("http://test.com");
+        assertThat(request.message()).contains("CONNECTION_ERROR");
+        assertThat(request.message()).contains("N/A");
+        assertThat(request.message()).contains("1200ms");
     }
 
     @Test
@@ -64,7 +67,7 @@ class AlertServiceTest {
         Api api = createApi(1, 3);
 
         // when
-        alertService.alertIfNeeded(api);
+        alertService.alertIfNeeded(api, "TIMEOUT", null, 5000L);
 
         // then
         verify(snsClient, never()).publish(any(PublishRequest.class));

@@ -19,7 +19,7 @@ public class AlertService {
     @Value("${aws.sns.topicArn}")
     private String topicArn;
 
-    public void alertIfNeeded(Api api) {
+    public void alertIfNeeded(Api api, String errorType, Integer statusCode, long latencyMs) {
         if (!shouldSendAlert(api)) {
             return;
         }
@@ -28,9 +28,24 @@ public class AlertService {
 
         snsClient.publish(PublishRequest.builder()
             .topicArn(topicArn)
-            .subject("[Pulse] API Consecutive failures detected")
-            .message("API Failed\nID: " + api.getApiId() + "\nURL: " + api.getUrl())
+            .subject("[Pulse] API monitoring alert - " + api.getUrl())
+            .message(buildMessage(api, errorType, statusCode, latencyMs))
             .build());
+    }
+
+    private String buildMessage(Api api, String errorType, Integer statusCode, long latencyMs) {
+        return "API Monitoring Alert\n"
+            + "====================\n\n"
+            + "[API]\n"
+            + "  ID      : " + api.getApiId() + "\n"
+            + "  Request : " + api.getMethod() + " " + api.getUrl() + "\n\n"
+            + "[Failure]\n"
+            + "  Type    : " + errorType + "\n"
+            + "  Status  : " + (statusCode != null ? statusCode : "N/A") + "\n"
+            + "  Latency : " + latencyMs + "ms\n\n"
+            + "[Summary]\n"
+            + "  Consecutive failures : " + api.getConsecutiveFailures() + " (threshold: " + api.getAlertThreshold() + ")\n"
+            + "  Detected at          : " + Instant.now() + "\n";
     }
 
     private boolean shouldSendAlert(Api api) {

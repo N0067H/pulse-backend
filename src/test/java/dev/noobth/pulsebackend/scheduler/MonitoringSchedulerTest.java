@@ -261,7 +261,7 @@ class MonitoringSchedulerTest {
 
         scheduler.monitor();
 
-        verify(alertService).alertIfNeeded(any(Api.class));
+        verify(alertService).alertIfNeeded(any(Api.class), anyString(), any(), anyLong());
     }
 
     @Test
@@ -291,6 +291,6 @@ class MonitoringSchedulerTest {
         scheduler.monitor();
 
         verify(checkResultRepository, times(1)).save(any(CheckResult.class));
-        verify(alertService, times(1)).alertIfNeeded(any());
+        verify(alertService, times(1)).alertIfNeeded(any(Api.class), anyString(), any(), anyLong());
     }
 }
