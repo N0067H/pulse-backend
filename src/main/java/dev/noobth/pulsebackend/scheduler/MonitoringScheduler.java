@@ -1,0 +1,128 @@
+package dev.noobth.pulsebackend.scheduler;
+
+import dev.noobth.pulsebackend.domain.Api;
+import dev.noobth.pulsebackend.domain.CheckResult;
+import dev.noobth.pulsebackend.repository.ApiRepository;
+import dev.noobth.pulsebackend.repository.CheckResultRepository;
+import dev.noobth.pulsebackend.service.AlertService;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpMethod;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.Exceptions;
+import reactor.util.retry.Retry;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.concurrent.TimeoutException;
+
+@Component
+@RequiredArgsConstructor
+public class MonitoringScheduler {
+
+    private static final Logger log = LoggerFactory.getLogger(MonitoringScheduler.class);
+    private final ApiRepository apiRepository;
+    private final CheckResultRepository checkResultRepository;
+    private final AlertService alertService;
+    private final WebClient webClient;
+
+    @Scheduled(fixedDelay = 5000)
+    public void monitor() {
+        apiRepository.findAll().stream()
+            .filter(Api::isEnabled)
+            .filter(api -> api.getNextCheckAt() == null || Instant.parse(api.getNextCheckAt()).isBefore(Instant.now()))
+            .forEach(api -> {
+                long startTime = System.currentTimeMillis();
+
+                webClient
+                    .method(HttpMethod.valueOf(api.getMethod()))
+                    .uri(api.getUrl())
+                    .retrieve()
+                    .toEntity(String.class)
+                    .timeout(Duration.ofSeconds(api.getTimeoutSeconds()))
+                    .retryWhen(Retry.fixedDelay(api.getRetryCount(), Duration.ofSeconds(1))
+                        .filter(e -> e instanceof TimeoutException || e instanceof WebClientRequestException))
+                    .subscribe(
+                        entity -> handleSuccess(api, startTime, entity.getStatusCode().value()),
+                        error -> handleError(api, startTime, error)
+                    );
+            });
+    }
+
+    private void handleSuccess(Api api, long startTime, int statusCode) {
+        long latency = System.currentTimeMillis() - startTime;
+        log.info("Monitoring success: {} {} | status={} latency={}ms", api.getMethod(), api.getUrl(), statusCode, latency);
+
+        saveCheckResult(api.getApiId(), statusCode, latency, true, null);
+        resetConsecutiveFailures(api);
+        updateNextCheckAt(api);
+    }
+
+    private void handleError(Api api, long startTime, Throwable error) {
+        long latency = System.currentTimeMillis() - startTime;
+        // retryWhen가 재시도를 소진하면 원본 예외를 RetryExhaustedException으로 감싸므로 unwrap한다
+        Throwable cause = Exceptions.isRetryExhausted(error) ? error.getCause() : error;
+        Integer statusCode = null;
+        String errorType;
+
+        switch (cause) {
+            case WebClientResponseException ex -> {
+                statusCode = ex.getStatusCode().value();
+                errorType = "HTTP_" + statusCode;
+                log.warn("Monitoring HTTP error: {} {} | status={} latency={}ms", api.getMethod(), api.getUrl(), statusCode, latency);
+            }
+            case TimeoutException ignored -> {
+                errorType = "TIMEOUT";
+                log.warn("Monitoring timeout: {} {} | latency={}ms", api.getMethod(), api.getUrl(), latency);
+            }
+            case WebClientRequestException ignored -> {
+                errorType = "CONNECTION_ERROR";
+                log.warn("Monitoring connection error: {} {} | error={} latency={}ms", api.getMethod(), api.getUrl(), cause.getMessage(), latency);
+            }
+            default -> {
+                errorType = "UNKNOWN_ERROR";
+                log.warn("Monitoring unknown error: {} {} | error={} latency={}ms", api.getMethod(), api.getUrl(), cause.getMessage(), latency);
+            }
+        }
+
+        saveCheckResult(api.getApiId(), statusCode, latency, false, errorType);
+        incrementConsecutiveFailures(api);
+        updateNextCheckAt(api);
+        alertService.alertIfNeeded(api.getApiId());
+    }
+
+    private void saveCheckResult(String apiId, Integer statusCode, long latencyMs, boolean success, String errorType) {
+        CheckResult result = new CheckResult();
+        result.setApiId(apiId);
+        result.setCheckedAt(Instant.now().toString());
+        result.setStatusCode(statusCode);
+        result.setLatencyMs(latencyMs);
+        result.setSuccess(success);
+        result.setErrorType(errorType);
+        result.setTtl(Instant.now().plus(30, ChronoUnit.DAYS).getEpochSecond());
+        checkResultRepository.save(result);
+    }
+
+    private void resetConsecutiveFailures(Api api) {
+        if (api.getConsecutiveFailures() > 0) {
+            api.setConsecutiveFailures(0);
+            apiRepository.save(api);
+        }
+    }
+
+    private void incrementConsecutiveFailures(Api api) {
+        api.setConsecutiveFailures(api.getConsecutiveFailures() + 1);
+        apiRepository.save(api);
+    }
+
+    private void updateNextCheckAt(Api api) {
+        api.setNextCheckAt(Instant.now().plusSeconds(api.getIntervalSeconds()).toString());
+        apiRepository.save(api);
+    }
+}
