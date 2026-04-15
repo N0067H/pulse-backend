@@ -2,8 +2,8 @@ package dev.noobth.pulsebackend.e2e;
 
 import dev.noobth.pulsebackend.scheduler.MonitoringScheduler;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ApiCrudE2ETest extends AbstractE2ETest {
 
     // Scheduler를 mock하여 등록된 API에 대한 실제 모니터링을 방지합니다.
-    @MockBean
+    @MockitoBean
     MonitoringScheduler monitoringScheduler;
 
     private Map<String, Object> validRequest() {

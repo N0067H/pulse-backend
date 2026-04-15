@@ -27,7 +27,7 @@ import software.amazon.awssdk.services.sns.model.CreateTopicRequest;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 abstract class AbstractE2ETest {
 
     @Container
