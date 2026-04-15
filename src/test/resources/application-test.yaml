@@ -1,0 +1,4 @@
+aws:
+  region: us-east-1
+  sns:
+    topicArn: arn:aws:sns:us-east-1:000000000000:pulse-alert
