@@ -1,6 +1,7 @@
 package dev.noobth.pulsebackend.controller;
 
 import dev.noobth.pulsebackend.domain.Api;
+import dev.noobth.pulsebackend.domain.CheckResult;
 import dev.noobth.pulsebackend.dto.CreateApiRequestDto;
 import dev.noobth.pulsebackend.dto.CreateApiResponseDto;
 import dev.noobth.pulsebackend.service.ApiService;
@@ -45,5 +46,12 @@ public class ApiController {
     public ResponseEntity<Map<String, Boolean>> toggleEnabled(@PathVariable String apiId) {
         boolean enabled = apiService.toggleEnabled(apiId);
         return ResponseEntity.ok(Map.of("enabled", enabled));
+    }
+
+    @GetMapping("/{apiId}/results")
+    public ResponseEntity<List<CheckResult>> getResults(
+            @PathVariable String apiId,
+            @RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(apiService.getResults(apiId, limit));
     }
 }

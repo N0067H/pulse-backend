@@ -1,6 +1,7 @@
 package dev.noobth.pulsebackend.controller;
 
 import dev.noobth.pulsebackend.domain.Api;
+import dev.noobth.pulsebackend.domain.CheckResult;
 import dev.noobth.pulsebackend.dto.CreateApiResponseDto;
 import dev.noobth.pulsebackend.service.ApiService;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -197,5 +199,47 @@ class ApiControllerTest {
                 .expectStatus().isNotFound()
                 .expectBody()
                 .jsonPath("$.message").isEqualTo("API not found: api1");
+    }
+
+    // ---- GET /apis/{apiId}/results ----
+
+    @Test
+    void getResults_returns200_withResultsList() {
+        CheckResult r = new CheckResult();
+        r.setApiId("api1");
+        r.setCheckedAt("2024-01-01T03:00:00Z");
+        r.setSuccess(true);
+
+        when(apiService.getResults("api1", 50)).thenReturn(List.of(r));
+
+        webTestClient.get().uri("/apis/api1/results")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.length()").isEqualTo(1)
+                .jsonPath("$[0].checkedAt").isEqualTo("2024-01-01T03:00:00Z");
+    }
+
+    @Test
+    void getResults_returns404_whenApiNotFound() {
+        when(apiService.getResults(eq("api1"), anyInt()))
+                .thenThrow(new NoSuchElementException("API not found: api1"));
+
+        webTestClient.get().uri("/apis/api1/results")
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("API not found: api1");
+    }
+
+    @Test
+    void getResults_passesLimitParam() {
+        when(apiService.getResults("api1", 10)).thenReturn(List.of());
+
+        webTestClient.get().uri("/apis/api1/results?limit=10")
+                .exchange()
+                .expectStatus().isOk();
+
+        verify(apiService).getResults("api1", 10);
     }
 }

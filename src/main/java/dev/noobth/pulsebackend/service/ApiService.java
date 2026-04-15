@@ -1,13 +1,16 @@
 package dev.noobth.pulsebackend.service;
 
 import dev.noobth.pulsebackend.domain.Api;
+import dev.noobth.pulsebackend.domain.CheckResult;
 import dev.noobth.pulsebackend.dto.CreateApiRequestDto;
 import dev.noobth.pulsebackend.dto.CreateApiResponseDto;
 import dev.noobth.pulsebackend.repository.ApiRepository;
+import dev.noobth.pulsebackend.repository.CheckResultRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -17,6 +20,7 @@ import java.util.UUID;
 public class ApiService {
 
     private final ApiRepository apiRepository;
+    private final CheckResultRepository checkResultRepository;
 
     public CreateApiResponseDto registerApi(CreateApiRequestDto request) {
         Api api = new Api();
@@ -56,5 +60,14 @@ public class ApiService {
         api.setEnabled(!api.isEnabled());
         apiRepository.save(api);
         return api.isEnabled();
+    }
+
+    public List<CheckResult> getResults(String apiId, int limit) {
+        apiRepository.findById(apiId)
+            .orElseThrow(() -> new NoSuchElementException("API not found: " + apiId));
+        return checkResultRepository.findByApiId(apiId).stream()
+            .sorted(Comparator.comparing(CheckResult::getCheckedAt).reversed())
+            .limit(limit)
+            .toList();
     }
 }
