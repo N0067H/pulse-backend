@@ -59,9 +59,13 @@ public class MonitoringScheduler {
         long latency = System.currentTimeMillis() - startTime;
         log.info("Monitoring success: {} {} | status={} latency={}ms", api.getMethod(), api.getUrl(), statusCode, latency);
 
-        saveCheckResult(api.getApiId(), statusCode, latency, true, null);
-        resetConsecutiveFailures(api);
-        updateNextCheckAt(api);
+        try {
+            saveCheckResult(api.getApiId(), statusCode, latency, true, null);
+            resetConsecutiveFailures(api);
+            updateNextCheckAt(api);
+        } catch (Exception e) {
+            log.error("Failed to persist result for {}: {}", api.getApiId(), e.getMessage(), e);
+        }
     }
 
     private void handleError(Api api, long startTime, Throwable error) {
@@ -91,10 +95,14 @@ public class MonitoringScheduler {
             }
         }
 
-        saveCheckResult(api.getApiId(), statusCode, latency, false, errorType);
-        incrementConsecutiveFailures(api);
-        updateNextCheckAt(api);
-        alertService.alertIfNeeded(api.getApiId());
+        try {
+            saveCheckResult(api.getApiId(), statusCode, latency, false, errorType);
+            incrementConsecutiveFailures(api);
+            updateNextCheckAt(api);
+            alertService.alertIfNeeded(api.getApiId());
+        } catch (Exception e) {
+            log.error("Failed to persist result for {}: {}", api.getApiId(), e.getMessage(), e);
+        }
     }
 
     private void saveCheckResult(String apiId, Integer statusCode, long latencyMs, boolean success, String errorType) {
