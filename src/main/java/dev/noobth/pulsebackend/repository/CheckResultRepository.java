@@ -28,31 +28,31 @@ public class CheckResultRepository {
 
     public Optional<CheckResult> findById(String apiId, String checkedAt) {
         CheckResult item = checkResultTable.getItem(
-                Key.builder()
-                        .partitionValue(apiId)
-                        .sortValue(checkedAt)
-                        .build()
+            Key.builder()
+                .partitionValue(apiId)
+                .sortValue(checkedAt)
+                .build()
         );
         return Optional.ofNullable(item);
     }
 
     public List<CheckResult> findByApiId(String apiId) {
         return checkResultTable.query(QueryConditional.keyEqualTo(Key.builder().partitionValue(apiId).build()))
-                .items()
-                .stream()
-                .toList();
+            .items()
+            .stream()
+            .toList();
     }
 
     public Optional<CheckResult> findLatestByApiId(String apiId) {
         QueryEnhancedRequest request = QueryEnhancedRequest.builder()
-                .queryConditional(QueryConditional.keyEqualTo(Key.builder().partitionValue(apiId).build()))
-                .scanIndexForward(false)
-                .limit(1)
-                .build();
+            .queryConditional(QueryConditional.keyEqualTo(Key.builder().partitionValue(apiId).build()))
+            .scanIndexForward(false)
+            .limit(1)
+            .build();
 
         return checkResultTable.query(request)
-                .items()
-                .stream()
-                .findFirst();
+            .items()
+            .stream()
+            .findFirst();
     }
 }

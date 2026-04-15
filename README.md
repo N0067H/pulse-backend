@@ -14,17 +14,6 @@
 
 Pulse Backend is a Spring Boot (WebFlux) service that periodically sends HTTP requests to registered API endpoints and records the results. When consecutive failures exceed a configured threshold, it publishes an alert via AWS SNS.
 
-### Architecture
-
-```
-pulse-frontend  (SvelteKit)  →  pulse-backend  (Spring Boot + WebFlux)
-                                      ↓                    ↓
-                                  DynamoDB              AWS SNS
-                               apis / check_results    (alert email)
-```
-
----
-
 **Key features**
 
 - Register any HTTP endpoint to monitor (GET, POST, etc.)
@@ -180,17 +169,6 @@ POST /apis
 ### 개요
 
 Pulse Backend는 등록된 API 엔드포인트에 주기적으로 HTTP 요청을 보내고 결과를 기록하는 Spring Boot(WebFlux) 서비스입니다. 연속 실패 횟수가 설정한 임계값을 초과하면 AWS SNS를 통해 알림 이메일을 발송합니다.
-
-### 아키텍처
-
-```
-pulse-frontend  (SvelteKit)  →  pulse-backend  (Spring Boot + WebFlux)
-                                      ↓                    ↓
-                                  DynamoDB              AWS SNS
-                               apis / check_results    (알림 이메일)
-```
-
----
 
 **주요 기능**
 
