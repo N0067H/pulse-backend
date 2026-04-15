@@ -1,7 +1,9 @@
 spring:
   application:
     name: pulse-backend
-
+  profiles:
+    active: local
 aws:
+  region: ${AWS_REGION:us-east-1}
   sns:
-    topicArn: arn:aws:sns:us-east-1:891376977549:pulse-alert
+    topicArn: ${AWS_SNS_TOPIC_ARN}

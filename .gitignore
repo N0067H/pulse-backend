@@ -36,6 +36,9 @@ out/
 ### VS Code ###
 .vscode/
 
+### Local config ###
+application-local.yaml
+
 ### Terraform ###
 .terraform/
 *.tfstate
