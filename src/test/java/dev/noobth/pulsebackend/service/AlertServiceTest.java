@@ -11,8 +11,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.model.PublishRequest;
 
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -44,10 +42,9 @@ class AlertServiceTest {
     void shouldSendAlert_whenThresholdExceeded() {
         // given
         Api api = createApi(5, 3);
-        when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
 
         // when
-        alertService.alertIfNeeded("api1");
+        alertService.alertIfNeeded(api);
 
         // then
         ArgumentCaptor<PublishRequest> captor =
@@ -65,10 +62,9 @@ class AlertServiceTest {
     void shouldNotSendAlert_whenBelowThreshold() {
         // given
         Api api = createApi(1, 3);
-        when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
 
         // when
-        alertService.alertIfNeeded("api1");
+        alertService.alertIfNeeded(api);
 
         // then
         verify(snsClient, never()).publish(any(PublishRequest.class));

@@ -99,7 +99,7 @@ public class MonitoringScheduler {
             saveCheckResult(api.getApiId(), statusCode, latency, false, errorType);
             incrementConsecutiveFailures(api);
             updateNextCheckAt(api);
-            alertService.alertIfNeeded(api.getApiId());
+            alertService.alertIfNeeded(api);
         } catch (Exception e) {
             log.error("Failed to persist result for {}: {}", api.getApiId(), e.getMessage(), e);
         }

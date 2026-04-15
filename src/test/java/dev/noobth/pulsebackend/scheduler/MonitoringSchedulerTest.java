@@ -261,7 +261,7 @@ class MonitoringSchedulerTest {
 
         scheduler.monitor();
 
-        verify(alertService).alertIfNeeded("api1");
+        verify(alertService).alertIfNeeded(any(Api.class));
     }
 
     @Test

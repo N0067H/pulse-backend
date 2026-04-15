@@ -19,19 +19,17 @@ public class AlertService {
     @Value("${aws.sns.topicArn}")
     private String topicArn;
 
-    public void alertIfNeeded(String apiId) {
-        Api api = apiRepository.findById(apiId).orElseThrow(() -> new IllegalArgumentException("API not found"));
-
+    public void alertIfNeeded(Api api) {
         if (!shouldSendAlert(api)) {
             return;
         }
 
-        apiRepository.updateAlertSentAt(apiId, Instant.now().toString());
+        apiRepository.updateAlertSentAt(api.getApiId(), Instant.now().toString());
 
         snsClient.publish(PublishRequest.builder()
             .topicArn(topicArn)
-            .subject("[Pulse] API Consecutive failures detected\n")
-            .message("API Failed\nID: " + apiId + "\nURL: " + api.getUrl())
+            .subject("[Pulse] API Consecutive failures detected")
+            .message("API Failed\nID: " + api.getApiId() + "\nURL: " + api.getUrl())
             .build());
     }
 
