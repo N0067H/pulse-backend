@@ -7,6 +7,7 @@ import dev.noobth.pulsebackend.dto.CreateApiResponseDto;
 import dev.noobth.pulsebackend.dto.Method;
 import dev.noobth.pulsebackend.repository.ApiRepository;
 import dev.noobth.pulsebackend.repository.CheckResultRepository;
+import dev.noobth.pulsebackend.scheduler.MonitoringScheduler;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -31,6 +32,9 @@ class ApiServiceTest {
 
     @Mock
     private CheckResultRepository checkResultRepository;
+
+    @Mock
+    private MonitoringScheduler monitoringScheduler;
 
     @InjectMocks
     private ApiService apiService;
@@ -78,6 +82,15 @@ class ApiServiceTest {
         assertThat(saved.getAlertCooldownSeconds()).isEqualTo(3600);
         assertThat(saved.getNextCheckAt()).isNotNull();
         assertThat(saved.isEnabled()).isTrue();
+    }
+
+    @Test
+    void registerApi_schedulesCheck() {
+        when(apiRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        apiService.registerApi(createRequest());
+
+        verify(monitoringScheduler).scheduleNextCheck(any(Api.class));
     }
 
     @Test
@@ -133,6 +146,7 @@ class ApiServiceTest {
         apiService.deleteApi("api1");
 
         verify(apiRepository).deleteById("api1");
+        verify(monitoringScheduler).unschedule("api1");
     }
 
     @Test
@@ -157,6 +171,7 @@ class ApiServiceTest {
 
         assertThat(result).isFalse();
         verify(apiRepository).save(api);
+        verify(monitoringScheduler).unschedule("api1");
     }
 
     @Test
@@ -168,6 +183,7 @@ class ApiServiceTest {
 
         assertThat(result).isTrue();
         verify(apiRepository).save(api);
+        verify(monitoringScheduler).scheduleNextCheck(api);
     }
 
     @Test

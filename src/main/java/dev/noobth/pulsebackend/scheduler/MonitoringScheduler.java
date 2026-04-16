@@ -5,11 +5,12 @@ import dev.noobth.pulsebackend.domain.CheckResult;
 import dev.noobth.pulsebackend.repository.ApiRepository;
 import dev.noobth.pulsebackend.repository.CheckResultRepository;
 import dev.noobth.pulsebackend.service.AlertService;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
@@ -20,6 +21,8 @@ import reactor.util.retry.Retry;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeoutException;
 
 @Component
@@ -31,28 +34,58 @@ public class MonitoringScheduler {
     private final CheckResultRepository checkResultRepository;
     private final AlertService alertService;
     private final WebClient webClient;
+    private final TaskScheduler taskScheduler;
 
-    @Scheduled(fixedDelay = 5000)
-    public void monitor() {
+    private final ConcurrentHashMap<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+
+    @PostConstruct
+    public void init() {
         apiRepository.findAll().stream()
             .filter(Api::isEnabled)
-            .filter(api -> api.getNextCheckAt() == null || Instant.parse(api.getNextCheckAt()).isBefore(Instant.now()))
-            .forEach(api -> {
-                long startTime = System.currentTimeMillis();
+            .forEach(this::scheduleNextCheck);
+        log.info("MonitoringScheduler initialized with {} APIs scheduled", scheduledTasks.size());
+    }
 
-                webClient
-                    .method(HttpMethod.valueOf(api.getMethod()))
-                    .uri(api.getUrl())
-                    .retrieve()
-                    .toEntity(String.class)
-                    .timeout(Duration.ofSeconds(api.getTimeoutSeconds()))
-                    .retryWhen(Retry.fixedDelay(api.getRetryCount(), Duration.ofSeconds(1))
-                        .filter(e -> e instanceof TimeoutException || e instanceof WebClientRequestException))
-                    .subscribe(
-                        entity -> handleSuccess(api, startTime, entity.getStatusCode().value()),
-                        error -> handleError(api, startTime, error)
-                    );
-            });
+    public void scheduleNextCheck(Api api) {
+        cancelIfScheduled(api.getApiId());
+        Instant now = Instant.now();
+        Instant nextCheck = api.getNextCheckAt() != null ? Instant.parse(api.getNextCheckAt()) : now;
+        Instant fireAt = nextCheck.isBefore(now) ? now : nextCheck;
+        scheduledTasks.put(api.getApiId(), taskScheduler.schedule(() -> executeCheck(api.getApiId()), fireAt));
+    }
+
+    public void unschedule(String apiId) {
+        cancelIfScheduled(apiId);
+    }
+
+    private void cancelIfScheduled(String apiId) {
+        ScheduledFuture<?> existing = scheduledTasks.remove(apiId);
+        if (existing != null) {
+            existing.cancel(false);
+        }
+    }
+
+    void executeCheck(String apiId) {
+        Api api = apiRepository.findById(apiId).orElse(null);
+        if (api == null || !api.isEnabled()) {
+            scheduledTasks.remove(apiId);
+            return;
+        }
+
+        long startTime = System.currentTimeMillis();
+
+        webClient
+            .method(HttpMethod.valueOf(api.getMethod()))
+            .uri(api.getUrl())
+            .retrieve()
+            .toEntity(String.class)
+            .timeout(Duration.ofSeconds(api.getTimeoutSeconds()))
+            .retryWhen(Retry.fixedDelay(api.getRetryCount(), Duration.ofSeconds(1))
+                .filter(e -> e instanceof TimeoutException || e instanceof WebClientRequestException))
+            .subscribe(
+                entity -> handleSuccess(api, startTime, entity.getStatusCode().value()),
+                error -> handleError(api, startTime, error)
+            );
     }
 
     private void handleSuccess(Api api, long startTime, int statusCode) {
@@ -65,12 +98,13 @@ public class MonitoringScheduler {
             updateNextCheckAt(api);
         } catch (Exception e) {
             log.error("Failed to persist result for {}: {}", api.getApiId(), e.getMessage(), e);
+        } finally {
+            scheduleNextCheck(api);
         }
     }
 
     private void handleError(Api api, long startTime, Throwable error) {
         long latency = System.currentTimeMillis() - startTime;
-        // retryWhen가 재시도를 소진하면 원본 예외를 RetryExhaustedException으로 감싸므로 unwrap한다
         Throwable cause = Exceptions.isRetryExhausted(error) ? error.getCause() : error;
         Integer statusCode = null;
         String errorType;
@@ -102,6 +136,8 @@ public class MonitoringScheduler {
             alertService.alertIfNeeded(api, errorType, statusCode, latency);
         } catch (Exception e) {
             log.error("Failed to persist result for {}: {}", api.getApiId(), e.getMessage(), e);
+        } finally {
+            scheduleNextCheck(api);
         }
     }
 

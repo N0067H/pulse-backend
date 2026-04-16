@@ -5,6 +5,7 @@ import dev.noobth.pulsebackend.domain.CheckResult;
 import dev.noobth.pulsebackend.repository.ApiRepository;
 import dev.noobth.pulsebackend.repository.CheckResultRepository;
 import dev.noobth.pulsebackend.service.AlertService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -14,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -24,6 +26,8 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,10 +42,19 @@ class MonitoringSchedulerTest {
     @Mock private CheckResultRepository checkResultRepository;
     @Mock private AlertService alertService;
     @Mock private WebClient webClient;
+    @Mock private TaskScheduler taskScheduler;
     @Mock private WebClient.RequestBodyUriSpec requestSpec;
     @Mock private WebClient.ResponseSpec responseSpec;
+    @Mock private ScheduledFuture<?> mockFuture;
 
     @InjectMocks private MonitoringScheduler scheduler;
+
+    @BeforeEach
+    @SuppressWarnings("unchecked")
+    void setUp() {
+        lenient().when(taskScheduler.schedule(any(Runnable.class), any(Instant.class)))
+            .thenReturn((ScheduledFuture) mockFuture);
+    }
 
     private Api createApi() {
         Api api = new Api();
@@ -69,64 +82,101 @@ class MonitoringSchedulerTest {
 
     private static WebClientRequestException connectionError() {
         return new WebClientRequestException(
-                new IOException("Connection refused"), HttpMethod.GET, URI.create("http://test.com"), new HttpHeaders());
+            new IOException("Connection refused"), HttpMethod.GET, URI.create("http://test.com"), new HttpHeaders());
     }
 
-    // ---- filter: enabled / nextCheckAt ----
+    // ---- init() ----
 
     @Test
-    void monitor_skipsDisabledApi() {
+    void init_schedulesEnabledApisOnly() {
+        Api enabled = createApi();
+        Api disabled = createApi();
+        disabled.setEnabled(false);
+        when(apiRepository.findAll()).thenReturn(List.of(enabled, disabled));
+
+        scheduler.init();
+
+        verify(taskScheduler, times(1)).schedule(any(Runnable.class), any(Instant.class));
+    }
+
+    // ---- scheduleNextCheck ----
+
+    @Test
+    void scheduleNextCheck_firesImmediately_whenNextCheckAtIsNull() {
+        Api api = createApi(); // nextCheckAt = null
+
+        scheduler.scheduleNextCheck(api);
+
+        ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
+        verify(taskScheduler).schedule(any(Runnable.class), captor.capture());
+        assertThat(captor.getValue()).isBeforeOrEqualTo(Instant.now().plusMillis(100));
+    }
+
+    @Test
+    void scheduleNextCheck_firesImmediately_whenNextCheckAtIsInPast() {
+        Api api = createApi();
+        api.setNextCheckAt(Instant.now().minusSeconds(60).toString());
+
+        scheduler.scheduleNextCheck(api);
+
+        ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
+        verify(taskScheduler).schedule(any(Runnable.class), captor.capture());
+        assertThat(captor.getValue()).isBeforeOrEqualTo(Instant.now().plusMillis(100));
+    }
+
+    @Test
+    void scheduleNextCheck_schedulesAtFutureTime_whenNextCheckAtIsInFuture() {
+        Api api = createApi();
+        Instant future = Instant.now().plusSeconds(60);
+        api.setNextCheckAt(future.toString());
+
+        scheduler.scheduleNextCheck(api);
+
+        ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
+        verify(taskScheduler).schedule(any(Runnable.class), captor.capture());
+        assertThat(captor.getValue()).isEqualTo(Instant.parse(api.getNextCheckAt()));
+    }
+
+    @Test
+    void unschedule_cancelsFuture() {
+        Api api = createApi();
+        scheduler.scheduleNextCheck(api);
+
+        scheduler.unschedule(api.getApiId());
+
+        verify(mockFuture).cancel(false);
+    }
+
+    // ---- executeCheck: skip conditions ----
+
+    @Test
+    void executeCheck_skipsDisabledApi() {
         Api api = createApi();
         api.setEnabled(false);
-        when(apiRepository.findAll()).thenReturn(List.of(api));
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
 
-        scheduler.monitor();
-
-        verify(webClient, never()).method(any());
-    }
-
-    @Test
-    void monitor_skipsApiWithFutureNextCheckAt() {
-        Api api = createApi();
-        api.setNextCheckAt(Instant.now().plusSeconds(60).toString());
-        when(apiRepository.findAll()).thenReturn(List.of(api));
-
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         verify(webClient, never()).method(any());
     }
 
     @Test
-    void monitor_checksApiWithNullNextCheckAt() {
-        Api api = createApi(); // nextCheckAt = null
-        when(apiRepository.findAll()).thenReturn(List.of(api));
-        mockWebClient(Mono.just(ResponseEntity.ok("ok")));
+    void executeCheck_skipsDeletedApi() {
+        when(apiRepository.findById("api1")).thenReturn(Optional.empty());
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
-        verify(webClient).method(HttpMethod.GET);
+        verify(webClient, never()).method(any());
     }
 
-    @Test
-    void monitor_checksApiWithPastNextCheckAt() {
-        Api api = createApi();
-        api.setNextCheckAt(Instant.now().minusSeconds(1).toString());
-        when(apiRepository.findAll()).thenReturn(List.of(api));
-        mockWebClient(Mono.just(ResponseEntity.ok("ok")));
-
-        scheduler.monitor();
-
-        verify(webClient).method(HttpMethod.GET);
-    }
-
-    // ---- success path ----
+    // ---- executeCheck: success path ----
 
     @Test
-    void monitor_onSuccess_savesCheckResultWithSuccessTrue() {
-        when(apiRepository.findAll()).thenReturn(List.of(createApi()));
+    void executeCheck_onSuccess_savesCheckResultWithSuccessTrue() {
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(createApi()));
         mockWebClient(Mono.just(ResponseEntity.status(200).body("ok")));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         ArgumentCaptor<CheckResult> captor = ArgumentCaptor.forClass(CheckResult.class);
         verify(checkResultRepository).save(captor.capture());
@@ -140,51 +190,63 @@ class MonitoringSchedulerTest {
     }
 
     @Test
-    void monitor_onSuccess_updatesNextCheckAt() {
+    void executeCheck_onSuccess_updatesNextCheckAt() {
         Api api = createApi();
-        when(apiRepository.findAll()).thenReturn(List.of(api));
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
         mockWebClient(Mono.just(ResponseEntity.ok("ok")));
 
         Instant before = Instant.now();
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         assertThat(api.getNextCheckAt()).isNotNull();
         assertThat(Instant.parse(api.getNextCheckAt())).isAfter(before);
     }
 
     @Test
-    void monitor_onSuccess_resetsConsecutiveFailures() {
+    void executeCheck_onSuccess_resetsConsecutiveFailures() {
         Api api = createApi();
         api.setConsecutiveFailures(3);
-        when(apiRepository.findAll()).thenReturn(List.of(api));
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
         mockWebClient(Mono.just(ResponseEntity.ok("ok")));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         assertThat(api.getConsecutiveFailures()).isEqualTo(0);
     }
 
     @Test
-    void monitor_onSuccess_doesNotSaveApi_whenConsecutiveFailuresAlreadyZero() {
+    void executeCheck_onSuccess_doesNotSaveApi_whenConsecutiveFailuresAlreadyZero() {
         Api api = createApi(); // consecutiveFailures = 0
-        when(apiRepository.findAll()).thenReturn(List.of(api));
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
         mockWebClient(Mono.just(ResponseEntity.ok("ok")));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         // resetConsecutiveFailures는 0이면 save를 호출하지 않으므로 nextCheckAt 업데이트 1번만 발생
         verify(apiRepository, times(1)).save(api);
     }
 
-    // ---- error path: HTTP error ----
+    @Test
+    void executeCheck_onSuccess_schedulesNextCheck() {
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(createApi()));
+        mockWebClient(Mono.just(ResponseEntity.ok("ok")));
+
+        scheduler.executeCheck("api1");
+
+        // scheduleNextCheck 호출: executeCheck 시작 1회 + handleSuccess finally 1회 = 2회
+        // 하지만 executeCheck 자체는 외부에서 직접 호출하므로 scheduleNextCheck는 finally에서 1회만 발생
+        verify(taskScheduler, times(1)).schedule(any(Runnable.class), any(Instant.class));
+    }
+
+    // ---- executeCheck: error path: HTTP error ----
 
     @Test
-    void monitor_onHttpError_savesCheckResultWithStatusCode() {
-        when(apiRepository.findAll()).thenReturn(List.of(createApi()));
+    void executeCheck_onHttpError_savesCheckResultWithStatusCode() {
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(createApi()));
         mockWebClient(Mono.error(WebClientResponseException.create(
-                404, "Not Found", HttpHeaders.EMPTY, new byte[0], StandardCharsets.UTF_8)));
+            404, "Not Found", HttpHeaders.EMPTY, new byte[0], StandardCharsets.UTF_8)));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         ArgumentCaptor<CheckResult> captor = ArgumentCaptor.forClass(CheckResult.class);
         verify(checkResultRepository).save(captor.capture());
@@ -193,14 +255,14 @@ class MonitoringSchedulerTest {
         assertThat(captor.getValue().getErrorType()).isEqualTo("HTTP_404");
     }
 
-    // ---- error path: timeout ----
+    // ---- executeCheck: error path: timeout ----
 
     @Test
-    void monitor_onTimeout_savesCheckResultWithTimeoutType() {
-        when(apiRepository.findAll()).thenReturn(List.of(createApi()));
+    void executeCheck_onTimeout_savesCheckResultWithTimeoutType() {
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(createApi()));
         mockWebClient(Mono.error(new TimeoutException()));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         ArgumentCaptor<CheckResult> captor = ArgumentCaptor.forClass(CheckResult.class);
         verify(checkResultRepository).save(captor.capture());
@@ -209,14 +271,14 @@ class MonitoringSchedulerTest {
         assertThat(captor.getValue().getStatusCode()).isNull();
     }
 
-    // ---- error path: connection error ----
+    // ---- executeCheck: error path: connection error ----
 
     @Test
-    void monitor_onConnectionError_savesCheckResultWithConnectionErrorType() {
-        when(apiRepository.findAll()).thenReturn(List.of(createApi()));
+    void executeCheck_onConnectionError_savesCheckResultWithConnectionErrorType() {
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(createApi()));
         mockWebClient(Mono.error(connectionError()));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         ArgumentCaptor<CheckResult> captor = ArgumentCaptor.forClass(CheckResult.class);
         verify(checkResultRepository).save(captor.capture());
@@ -225,14 +287,14 @@ class MonitoringSchedulerTest {
         assertThat(captor.getValue().getStatusCode()).isNull();
     }
 
-    // ---- error path: unknown error ----
+    // ---- executeCheck: error path: unknown error ----
 
     @Test
-    void monitor_onUnknownError_savesCheckResultWithUnknownType() {
-        when(apiRepository.findAll()).thenReturn(List.of(createApi()));
+    void executeCheck_onUnknownError_savesCheckResultWithUnknownType() {
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(createApi()));
         mockWebClient(Mono.error(new RuntimeException("unexpected")));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         ArgumentCaptor<CheckResult> captor = ArgumentCaptor.forClass(CheckResult.class);
         verify(checkResultRepository).save(captor.capture());
@@ -240,38 +302,38 @@ class MonitoringSchedulerTest {
         assertThat(captor.getValue().getErrorType()).isEqualTo("UNKNOWN_ERROR");
     }
 
-    // ---- error path: common behaviors ----
+    // ---- executeCheck: error path: common behaviors ----
 
     @Test
-    void monitor_onError_incrementsConsecutiveFailures() {
+    void executeCheck_onError_incrementsConsecutiveFailures() {
         Api api = createApi();
         api.setConsecutiveFailures(2);
-        when(apiRepository.findAll()).thenReturn(List.of(api));
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
         mockWebClient(Mono.error(new TimeoutException()));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         assertThat(api.getConsecutiveFailures()).isEqualTo(3);
     }
 
     @Test
-    void monitor_onError_callsAlertService() {
-        when(apiRepository.findAll()).thenReturn(List.of(createApi()));
+    void executeCheck_onError_callsAlertService() {
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(createApi()));
         mockWebClient(Mono.error(new TimeoutException()));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         verify(alertService).alertIfNeeded(any(Api.class), anyString(), any(), anyLong());
     }
 
     @Test
-    void monitor_onError_updatesNextCheckAt() {
+    void executeCheck_onError_updatesNextCheckAt() {
         Api api = createApi();
-        when(apiRepository.findAll()).thenReturn(List.of(api));
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
         mockWebClient(Mono.error(new TimeoutException()));
 
         Instant before = Instant.now();
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         assertThat(api.getNextCheckAt()).isNotNull();
         assertThat(Instant.parse(api.getNextCheckAt())).isAfter(before);
@@ -280,15 +342,15 @@ class MonitoringSchedulerTest {
     // ---- retry behavior ----
 
     @Test
-    void monitor_doesNotRetry_onHttpError() {
+    void executeCheck_doesNotRetry_onHttpError() {
         // retryCount=2이지만 HTTP 에러는 retry 필터를 통과하지 못해야 한다
         Api api = createApi();
         api.setRetryCount(2);
-        when(apiRepository.findAll()).thenReturn(List.of(api));
+        when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
         mockWebClient(Mono.error(WebClientResponseException.create(
-                500, "Server Error", HttpHeaders.EMPTY, new byte[0], StandardCharsets.UTF_8)));
+            500, "Server Error", HttpHeaders.EMPTY, new byte[0], StandardCharsets.UTF_8)));
 
-        scheduler.monitor();
+        scheduler.executeCheck("api1");
 
         verify(checkResultRepository, times(1)).save(any(CheckResult.class));
         verify(alertService, times(1)).alertIfNeeded(any(Api.class), anyString(), any(), anyLong());
