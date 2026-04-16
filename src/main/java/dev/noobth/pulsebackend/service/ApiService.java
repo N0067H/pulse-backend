@@ -6,6 +6,7 @@ import dev.noobth.pulsebackend.dto.CreateApiRequestDto;
 import dev.noobth.pulsebackend.dto.CreateApiResponseDto;
 import dev.noobth.pulsebackend.repository.ApiRepository;
 import dev.noobth.pulsebackend.repository.CheckResultRepository;
+import dev.noobth.pulsebackend.scheduler.MonitoringScheduler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +22,7 @@ public class ApiService {
 
     private final ApiRepository apiRepository;
     private final CheckResultRepository checkResultRepository;
+    private final MonitoringScheduler monitoringScheduler;
 
     public CreateApiResponseDto registerApi(CreateApiRequestDto request) {
         Api api = new Api();
@@ -35,6 +37,7 @@ public class ApiService {
         api.setNextCheckAt(Instant.now().toString());
 
         apiRepository.save(api);
+        monitoringScheduler.scheduleNextCheck(api);
 
         return new CreateApiResponseDto(api.getApiId(), "registered");
     }
@@ -52,6 +55,7 @@ public class ApiService {
         apiRepository.findById(apiId)
             .orElseThrow(() -> new NoSuchElementException("API not found: " + apiId));
         apiRepository.deleteById(apiId);
+        monitoringScheduler.unschedule(apiId);
     }
 
     public boolean toggleEnabled(String apiId) {
@@ -59,6 +63,11 @@ public class ApiService {
             .orElseThrow(() -> new NoSuchElementException("API not found: " + apiId));
         api.setEnabled(!api.isEnabled());
         apiRepository.save(api);
+        if (api.isEnabled()) {
+            monitoringScheduler.scheduleNextCheck(api);
+        } else {
+            monitoringScheduler.unschedule(apiId);
+        }
         return api.isEnabled();
     }
 
