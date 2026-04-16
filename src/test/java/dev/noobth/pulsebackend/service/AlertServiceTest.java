@@ -1,7 +1,6 @@
 package dev.noobth.pulsebackend.service;
 
 import dev.noobth.pulsebackend.domain.Api;
-import dev.noobth.pulsebackend.repository.ApiRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -12,7 +11,7 @@ import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.model.PublishRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -20,9 +19,6 @@ class AlertServiceTest {
 
     @Mock
     private SnsClient snsClient;
-
-    @Mock
-    private ApiRepository apiRepository;
 
     @InjectMocks
     private AlertService alertService;
@@ -51,7 +47,7 @@ class AlertServiceTest {
                 ArgumentCaptor.forClass(PublishRequest.class);
 
         verify(snsClient).publish(captor.capture());
-        verify(apiRepository).updateAlertSentAt(eq("api1"), anyString());
+        assertThat(api.getAlertSentAt()).isNotNull();
 
         PublishRequest request = captor.getValue();
         assertThat(request.message()).contains("api1");
@@ -71,6 +67,6 @@ class AlertServiceTest {
 
         // then
         verify(snsClient, never()).publish(any(PublishRequest.class));
-        verify(apiRepository, never()).updateAlertSentAt(anyString(), anyString());
+        assertThat(api.getAlertSentAt()).isNull();
     }
 }

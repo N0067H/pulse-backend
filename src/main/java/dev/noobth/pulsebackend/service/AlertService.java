@@ -1,7 +1,6 @@
 package dev.noobth.pulsebackend.service;
 
 import dev.noobth.pulsebackend.domain.Api;
-import dev.noobth.pulsebackend.repository.ApiRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -14,7 +13,6 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class AlertService {
     private final SnsClient snsClient;
-    private final ApiRepository apiRepository;
 
     @Value("${aws.sns.topicArn}")
     private String topicArn;
@@ -24,7 +22,7 @@ public class AlertService {
             return;
         }
 
-        apiRepository.updateAlertSentAt(api.getApiId(), Instant.now().toString());
+        api.setAlertSentAt(Instant.now().toString());
 
         snsClient.publish(PublishRequest.builder()
             .topicArn(topicArn)
