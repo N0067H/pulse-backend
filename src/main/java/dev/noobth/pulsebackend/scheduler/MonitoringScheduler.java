@@ -136,8 +136,8 @@ public class MonitoringScheduler {
             saveCheckResult(api.getApiId(), statusCode, latency, false, errorType);
             api.setConsecutiveFailures(api.getConsecutiveFailures() + 1);
             api.setNextCheckAt(Instant.now().plusSeconds(api.getIntervalSeconds()).toString());
-            apiRepository.save(api);
             alertService.alertIfNeeded(api, errorType, statusCode, latency);
+            apiRepository.save(api);
         } catch (Exception e) {
             log.error("Failed to persist result for {}: {}", api.getApiId(), e.getMessage(), e);
         } finally {
