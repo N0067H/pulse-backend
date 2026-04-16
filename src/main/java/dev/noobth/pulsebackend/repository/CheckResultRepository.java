@@ -36,23 +36,20 @@ public class CheckResultRepository {
         return Optional.ofNullable(item);
     }
 
-    public List<CheckResult> findByApiId(String apiId) {
-        return checkResultTable.query(QueryConditional.keyEqualTo(Key.builder().partitionValue(apiId).build()))
+    public List<CheckResult> findRecentByApiId(String apiId, int limit) {
+        QueryEnhancedRequest request = QueryEnhancedRequest.builder()
+            .queryConditional(QueryConditional.keyEqualTo(Key.builder().partitionValue(apiId).build()))
+            .scanIndexForward(false)
+            .limit(limit)
+            .build();
+
+        return checkResultTable.query(request)
             .items()
             .stream()
             .toList();
     }
 
     public Optional<CheckResult> findLatestByApiId(String apiId) {
-        QueryEnhancedRequest request = QueryEnhancedRequest.builder()
-            .queryConditional(QueryConditional.keyEqualTo(Key.builder().partitionValue(apiId).build()))
-            .scanIndexForward(false)
-            .limit(1)
-            .build();
-
-        return checkResultTable.query(request)
-            .items()
-            .stream()
-            .findFirst();
+        return findRecentByApiId(apiId, 1).stream().findFirst();
     }
 }

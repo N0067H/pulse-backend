@@ -94,8 +94,11 @@ public class MonitoringScheduler {
 
         try {
             saveCheckResult(api.getApiId(), statusCode, latency, true, null);
-            resetConsecutiveFailures(api);
-            updateNextCheckAt(api);
+            if (api.getConsecutiveFailures() > 0) {
+                api.setConsecutiveFailures(0);
+            }
+            api.setNextCheckAt(Instant.now().plusSeconds(api.getIntervalSeconds()).toString());
+            apiRepository.save(api);
         } catch (Exception e) {
             log.error("Failed to persist result for {}: {}", api.getApiId(), e.getMessage(), e);
         } finally {
@@ -131,8 +134,9 @@ public class MonitoringScheduler {
 
         try {
             saveCheckResult(api.getApiId(), statusCode, latency, false, errorType);
-            incrementConsecutiveFailures(api);
-            updateNextCheckAt(api);
+            api.setConsecutiveFailures(api.getConsecutiveFailures() + 1);
+            api.setNextCheckAt(Instant.now().plusSeconds(api.getIntervalSeconds()).toString());
+            apiRepository.save(api);
             alertService.alertIfNeeded(api, errorType, statusCode, latency);
         } catch (Exception e) {
             log.error("Failed to persist result for {}: {}", api.getApiId(), e.getMessage(), e);
@@ -153,20 +157,4 @@ public class MonitoringScheduler {
         checkResultRepository.save(result);
     }
 
-    private void resetConsecutiveFailures(Api api) {
-        if (api.getConsecutiveFailures() > 0) {
-            api.setConsecutiveFailures(0);
-            apiRepository.save(api);
-        }
-    }
-
-    private void incrementConsecutiveFailures(Api api) {
-        api.setConsecutiveFailures(api.getConsecutiveFailures() + 1);
-        apiRepository.save(api);
-    }
-
-    private void updateNextCheckAt(Api api) {
-        api.setNextCheckAt(Instant.now().plusSeconds(api.getIntervalSeconds()).toString());
-        apiRepository.save(api);
-    }
 }
