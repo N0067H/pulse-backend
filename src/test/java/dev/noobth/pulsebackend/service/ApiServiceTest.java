@@ -200,8 +200,7 @@ class ApiServiceTest {
     @Test
     void getResults_returnsSortedDescAndLimited() {
         when(apiRepository.findById("api1")).thenReturn(Optional.of(createApi("api1", true)));
-        when(checkResultRepository.findByApiId("api1")).thenReturn(List.of(
-                createCheckResult("api1", "2024-01-01T01:00:00Z", true),
+        when(checkResultRepository.findRecentByApiId("api1", 2)).thenReturn(List.of(
                 createCheckResult("api1", "2024-01-01T03:00:00Z", false),
                 createCheckResult("api1", "2024-01-01T02:00:00Z", true)
         ));

@@ -11,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -74,9 +73,6 @@ public class ApiService {
     public List<CheckResult> getResults(String apiId, int limit) {
         apiRepository.findById(apiId)
             .orElseThrow(() -> new NoSuchElementException("API not found: " + apiId));
-        return checkResultRepository.findByApiId(apiId).stream()
-            .sorted(Comparator.comparing(CheckResult::getCheckedAt).reversed())
-            .limit(limit)
-            .toList();
+        return checkResultRepository.findRecentByApiId(apiId, limit);
     }
 }

@@ -215,14 +215,13 @@ class MonitoringSchedulerTest {
     }
 
     @Test
-    void executeCheck_onSuccess_doesNotSaveApi_whenConsecutiveFailuresAlreadyZero() {
+    void executeCheck_onSuccess_savesApiOnce() {
         Api api = createApi(); // consecutiveFailures = 0
         when(apiRepository.findById("api1")).thenReturn(Optional.of(api));
         mockWebClient(Mono.just(ResponseEntity.ok("ok")));
 
         scheduler.executeCheck("api1");
 
-        // resetConsecutiveFailures는 0이면 save를 호출하지 않으므로 nextCheckAt 업데이트 1번만 발생
         verify(apiRepository, times(1)).save(api);
     }
 
