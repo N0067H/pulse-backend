@@ -16,6 +16,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.Exceptions;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
@@ -37,6 +38,11 @@ public class MonitoringScheduler {
     private final TaskScheduler taskScheduler;
 
     private final ConcurrentHashMap<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+    private reactor.core.scheduler.Scheduler reactiveScheduler = Schedulers.boundedElastic();
+
+    void setReactiveScheduler(reactor.core.scheduler.Scheduler reactiveScheduler) {
+        this.reactiveScheduler = reactiveScheduler;
+    }
 
     @PostConstruct
     public void init() {
@@ -82,6 +88,7 @@ public class MonitoringScheduler {
             .timeout(Duration.ofSeconds(api.getTimeoutSeconds()))
             .retryWhen(Retry.fixedDelay(api.getRetryCount(), Duration.ofSeconds(1))
                 .filter(e -> e instanceof TimeoutException || e instanceof WebClientRequestException))
+            .publishOn(reactiveScheduler)
             .subscribe(
                 entity -> handleSuccess(api, startTime, entity.getStatusCode().value()),
                 error -> handleError(api, startTime, error)
