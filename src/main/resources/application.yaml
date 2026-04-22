@@ -7,3 +7,13 @@ aws:
   region: ${AWS_REGION:us-east-1}
   sns:
     topicArn: ${AWS_SNS_TOPIC_ARN}
+management:
+  cloudwatch:
+    metrics:
+      export:
+        namespace: PulseBackend
+        step: 1m
+        batch-size: 20
+  metrics:
+    tags:
+      application: pulse-backend

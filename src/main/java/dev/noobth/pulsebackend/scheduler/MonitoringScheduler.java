@@ -5,6 +5,10 @@ import dev.noobth.pulsebackend.domain.CheckResult;
 import dev.noobth.pulsebackend.repository.ApiRepository;
 import dev.noobth.pulsebackend.repository.CheckResultRepository;
 import dev.noobth.pulsebackend.service.AlertService;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -24,6 +28,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 @Component
@@ -36,6 +41,7 @@ public class MonitoringScheduler {
     private final AlertService alertService;
     private final WebClient webClient;
     private final TaskScheduler taskScheduler;
+    private final MeterRegistry meterRegistry;
 
     private final ConcurrentHashMap<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
     private reactor.core.scheduler.Scheduler reactiveScheduler = Schedulers.boundedElastic();
@@ -46,6 +52,10 @@ public class MonitoringScheduler {
 
     @PostConstruct
     public void init() {
+        Gauge.builder("api.scheduled.count", scheduledTasks, ConcurrentHashMap::size)
+            .description("Number of currently scheduled API monitors")
+            .register(meterRegistry);
+
         apiRepository.findAll().stream()
             .filter(Api::isEnabled)
             .forEach(this::scheduleNextCheck);
@@ -99,6 +109,10 @@ public class MonitoringScheduler {
         long latency = System.currentTimeMillis() - startTime;
         log.info("Monitoring success: {} {} | status={} latency={}ms", api.getMethod(), api.getUrl(), statusCode, latency);
 
+        meterRegistry.counter("api.check.total", "result", "success").increment();
+        meterRegistry.timer("api.check.latency", "result", "success")
+            .record(latency, TimeUnit.MILLISECONDS);
+
         try {
             saveCheckResult(api.getApiId(), statusCode, latency, true, null);
             if (api.getConsecutiveFailures() > 0) {
@@ -138,6 +152,10 @@ public class MonitoringScheduler {
                 log.warn("Monitoring unknown error: {} {} | error={} latency={}ms", api.getMethod(), api.getUrl(), cause.getMessage(), latency);
             }
         }
+
+        meterRegistry.counter("api.check.total", "result", "failure", "error_type", errorType).increment();
+        meterRegistry.timer("api.check.latency", "result", "failure")
+            .record(latency, TimeUnit.MILLISECONDS);
 
         try {
             saveCheckResult(api.getApiId(), statusCode, latency, false, errorType);
