@@ -38,6 +38,7 @@ resource "aws_instance" "pulse" {
     StandardOutput=append:/var/log/pulse/app.log
     StandardError=append:/var/log/pulse/app.log
     Environment=AWS_REGION=${var.aws_region}
+    Environment=AWS_SNS_TOPIC_ARN=${aws_sns_topic.pulse_alert.arn}
 
     [Install]
     WantedBy=multi-user.target
